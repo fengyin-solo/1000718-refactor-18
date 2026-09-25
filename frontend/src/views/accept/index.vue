@@ -31,12 +31,16 @@
       <thead>
         <tr>
           <th v-for="column in columns" :key="column">{{ column }}</th>
+          <th>材料是否齐套</th>
+          <th>项目是否合格</th>
           <th>可执行动作</th>
         </tr>
       </thead>
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)">
           <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
+          <td>{{ checkLabel(row, '材料齐套') }}</td>
+          <td>{{ checkLabel(row, '项目合格') }}</td>
           <td class="row-actions">
             <button
               v-for="action in actions"
@@ -50,7 +54,7 @@
           </td>
         </tr>
         <tr v-if="!rows.length">
-          <td :colspan="columns.length + 1" class="empty-state">暂无竣工验收数据，可先登记验收单</td>
+          <td :colspan="columns.length + 3" class="empty-state">暂无竣工验收数据，可先登记验收单</td>
         </tr>
       </tbody>
     </table>
@@ -67,7 +71,8 @@ import { onMounted, ref } from 'vue'
 
 import { request } from '@/api/client'
 
-type Row = Record<string, string | number | null>
+type AcceptCheck = { 材料齐套: boolean; 项目合格: boolean }
+type Row = Record<string, string | number | boolean | null | AcceptCheck>
 
 const ENDPOINT = '/api/accept'
 const columns = ["验收单号", "关联施工", "验收项目", "验收标准", "验收结论", "验收人员", "验收日期", "验收状态"]
@@ -80,6 +85,15 @@ const total = ref(0)
 const errorMessage = ref('')
 const filters = ref<Record<string, string>>({})
 const filterFields = columns.slice(0, 3)
+
+// 「材料是否齐套」「项目是否合格」直接展示后端共用判定的结果，页面不另算一遍。
+function checkLabel(row: Row, key: keyof AcceptCheck): string {
+  const check = row['验收判定']
+  if (!check || typeof check !== 'object') {
+    return '—'
+  }
+  return check[key] ? '是' : '否'
+}
 
 function resetFilters() {
   filters.value = {}
