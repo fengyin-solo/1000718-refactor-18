@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.services.accept_judgment import judge_acceptance
 from app.store import store
 
 MODULE = "accept"
@@ -10,6 +11,15 @@ REQUIRED_FIELDS = ["验收单号", "关联施工", "验收项目"]
 STATUS_ORDER = ["待验收", "验收中", "已通过", "需返工"]
 ACTION_RULES = {"开始验收": "验收中", "确认通过": "已通过", "下发返工": "需返工"}
 NEGATIVE_ACTIONS = []
+
+
+def _with_judgment(entry: dict[str, Any]) -> dict[str, Any]:
+    """给验收单附上统一判定结果。
+
+    判定结果只挂在返回的副本上，不回写库里的原始验收单，
+    保证历史数据与既有字段（含验收结论）原样不动。
+    """
+    return {**entry, "验收判定": judge_acceptance(entry)}
 
 
 class AcceptService:
@@ -28,10 +38,13 @@ class AcceptService:
             rows = [row for row in rows if row.get("status") == status]
         total = len(rows)
         start = max(page - 1, 0) * size
-        return rows[start:start + size], total
+        return [_with_judgment(row) for row in rows[start:start + size]], total
 
     def get_entry(self, entry_id: int) -> dict[str, Any] | None:
-        return store.find(MODULE, entry_id)
+        entry = store.find(MODULE, entry_id)
+        if entry is None:
+            return None
+        return _with_judgment(entry)
 
     def create_entry(self, values: dict[str, Any]) -> tuple[dict[str, Any] | None, list[str]]:
         missing = [field for field in REQUIRED_FIELDS if not str(values.get(field) or "").strip()]
@@ -44,7 +57,7 @@ class AcceptService:
         entry["pending"] = True
         entry["abnormal"] = False
         rows.append(entry)
-        return entry, []
+        return _with_judgment(entry), []
 
     def run_action(self, entry_id: int, action: str) -> tuple[dict[str, Any] | None, str]:
         entry = store.find(MODULE, entry_id)
@@ -58,4 +71,4 @@ class AcceptService:
         entry["status"] = target
         entry["pending"] = target != STATUS_ORDER[-1]
         entry["abnormal"] = action in NEGATIVE_ACTIONS
-        return entry, f"验收单已{action}"
+        return _with_judgment(entry), f"验收单已{action}"

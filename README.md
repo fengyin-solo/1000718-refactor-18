@@ -74,3 +74,5 @@ npm run dev
   `backend/app/routers/<模块>.py`，业务规则在 `backend/app/services/<模块>.py`。
 - 列表接口统一返回 `{ items, total, page, size }`，动作接口统一返回 `{ ok, message }`。
 - 状态流转只允许在 `app/services` 里改，路由层不做业务判断。
+- 竣工验收的「材料齐套 / 项目合格」判定只有 `backend/app/services/accept_judgment.py`
+  一份实现，前端页面展示接口返回的判定结果，任何一端都不得再自行判定。

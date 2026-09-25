@@ -36,7 +36,7 @@
       </thead>
       <tbody>
         <tr v-for="row in rows" :key="String(row.id)">
-          <td v-for="column in columns" :key="column">{{ row[column] ?? '—' }}</td>
+          <td v-for="column in columns" :key="column" :title="cellHint(row, column)">{{ row[column] ?? '—' }}</td>
           <td class="row-actions">
             <button
               v-for="action in actions"
@@ -67,10 +67,18 @@ import { onMounted, ref } from 'vue'
 
 import { request } from '@/api/client'
 
-type Row = Record<string, string | number | null>
+type Row = Record<string, string | number | null | string[]>
+
+// 后端统一判定结果（app/services/accept_judgment.py），前端只展示、不自行判定
+type Judgment = {
+  材料齐套: string
+  项目合格: string
+  判定结论: string
+  材料缺项: string[]
+}
 
 const ENDPOINT = '/api/accept'
-const columns = ["验收单号", "关联施工", "验收项目", "验收标准", "验收结论", "验收人员", "验收日期", "验收状态"]
+const columns = ["验收单号", "关联施工", "验收项目", "验收标准", "验收结论", "验收人员", "验收日期", "验收状态", "材料齐套", "项目合格", "判定结论"]
 const actions = ["开始验收", "确认通过", "下发返工"]
 const statuses = ["待验收", "验收中", "已通过", "需返工"]
 const stats = [{"label": "待验收单据", "value": 0}, {"label": "本月通过数", "value": 0}, {"label": "需返工项数", "value": 0}]
@@ -84,6 +92,15 @@ const filterFields = columns.slice(0, 3)
 function resetFilters() {
   filters.value = {}
   void reload()
+}
+
+// 材料不齐套时在单元格悬停提示缺项，缺项清单同样来自后端判定
+function cellHint(row: Row, column: string): string {
+  if (column !== '材料齐套') {
+    return ''
+  }
+  const missing = row['材料缺项']
+  return Array.isArray(missing) && missing.length > 0 ? `缺少材料：${missing.join('、')}` : ''
 }
 
 function exportRows() {
@@ -119,7 +136,9 @@ async function reload() {
       throw new Error('验收单列表读取失败')
     }
     const payload = await response.json()
-    rows.value = payload.items ?? []
+    const items: (Row & { 验收判定?: Judgment })[] = payload.items ?? []
+    // 判定结果由后端统一给出，这里只把嵌套的判定字段平铺到行上供表格展示
+    rows.value = items.map(({ 验收判定: judgment, ...row }) => ({ ...row, ...judgment }))
     total.value = payload.total ?? rows.value.length
   } catch (error) {
     errorMessage.value = error instanceof Error ? error.message : '竣工验收列表读取失败'
